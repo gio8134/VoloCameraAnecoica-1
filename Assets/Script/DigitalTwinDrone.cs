@@ -10,18 +10,18 @@ using UnityEngine.Networking;
 /// Unity 6 - 6000.4.2f1
 /// Built-in Render Pipeline
 ///
-/// Funzionamento:
+/// Il Drone viene creato utilizzando un prefab assegnato
+/// dall'Inspector.
 ///
-/// 1. Riceve un riferimento a RoomGenerator.
-/// 2. Riceve dall'Inspector la URL dell'API /position.
-/// 3. In Start() crea una Capsule.
-/// 4. La Capsule ha dimensioni:
-///      altezza = 10 cm
-///      larghezza = 60 cm
-/// 5. Crea e assegna un materiale opaco e ben visibile.
-/// 6. Ogni 5 secondi effettua una GET HTTP.
-/// 7. Legge la posizione {x,y,z} restituita dal server.
-/// 8. Muove gradualmente la Capsule verso la nuova posizione.
+/// Ogni 5 secondi viene effettuata una richiesta GET
+/// all'URL configurato.
+///
+/// Il server deve restituire un JSON del tipo:
+///
+/// {"x":0.548,"y":0.954,"z":-3.721}
+///
+/// Il Drone viene quindi spostato gradualmente verso
+/// la posizione ricevuta.
 /// </summary>
 public class DigitalTwinDrone : MonoBehaviour
 {
@@ -32,10 +32,24 @@ public class DigitalTwinDrone : MonoBehaviour
     [Header("Room Generator")]
 
     [Tooltip(
-        "Riferimento al GameObject che contiene RoomGenerator."
+        "Riferimento al componente RoomGenerator."
     )]
     [SerializeField]
     private RoomGenerator roomGenerator;
+
+
+    // =========================================================
+    // DRONE PREFAB
+    // =========================================================
+
+    [Header("Drone Prefab")]
+
+    [Tooltip(
+        "Prefab del Drone. Trascinare qui " +
+        "Assets/Drone.prefab."
+    )]
+    [SerializeField]
+    private GameObject dronePrefab;
 
 
     // =========================================================
@@ -45,8 +59,8 @@ public class DigitalTwinDrone : MonoBehaviour
     [Header("Position Server")]
 
     [Tooltip(
-        "URL completa dell'API che restituisce una nuova " +
-        "posizione. Esempio: http://localhost:8080/position"
+        "URL completa dell'API che restituisce la posizione. " +
+        "Esempio: http://localhost:8080/position"
     )]
     [SerializeField]
     private string positionUrl =
@@ -60,80 +74,51 @@ public class DigitalTwinDrone : MonoBehaviour
     [Header("Movimento")]
 
     [Tooltip(
-        "Velocità di movimento della Digital Twin Capsule " +
-        "in metri al secondo."
+        "Velocità di movimento del Drone in metri al secondo."
     )]
     [SerializeField]
     private float movementSpeed = 2.0f;
 
 
     [Tooltip(
-        "Intervallo tra una richiesta HTTP e la successiva."
+        "Intervallo tra due richieste HTTP."
     )]
     [SerializeField]
     private float requestInterval = 5.0f;
 
 
     // =========================================================
-    // CAPSULA
+    // HTTP
     // =========================================================
 
-    [Header("Digital Twin Capsule")]
+    [Header("HTTP")]
 
     [Tooltip(
-        "Larghezza/diametro della capsula in metri."
+        "Timeout della richiesta HTTP in secondi."
     )]
     [SerializeField]
-    private float capsuleWidth = 0.60f;
-
-
-    [Tooltip(
-        "Altezza complessiva della capsula in metri."
-    )]
-    [SerializeField]
-    private float capsuleHeight = 0.10f;
-
-
-    [Tooltip(
-        "Nome del GameObject creato."
-    )]
-    [SerializeField]
-    private string capsuleName =
-        "DigitalTwinDrone";
+    private int requestTimeout = 5;
 
 
     // =========================================================
-    // MATERIALE
+    // DEBUG
     // =========================================================
 
-    [Header("Materiale")]
+    [Header("Debug")]
 
-    [Tooltip(
-        "Colore della Digital Twin Capsule."
-    )]
     [SerializeField]
-    private Color capsuleColor =
-        new Color(
-            1.0f,
-            0.05f,
-            0.02f,
-            1.0f
-        );
+    private bool logResponses = true;
 
 
     // =========================================================
-    // RIFERIMENTI INTERNI
+    // RIFERIMENTO DRONE
     // =========================================================
 
     private GameObject droneObject;
 
-    private Renderer droneRenderer;
-
-    private Material droneMaterial;
-
 
     // =========================================================
-    // POSIZIONE TARGET
+    // TARGET
     // =========================================================
 
     private Vector3 targetPosition;
@@ -146,6 +131,65 @@ public class DigitalTwinDrone : MonoBehaviour
     // =========================================================
 
     private Coroutine positionCoroutine;
+
+
+    // =========================================================
+    // PROPRIETÀ PUBBLICHE
+    // UTILIZZATE DA DigitalTwinTracker
+    // =========================================================
+
+    /// <summary>
+    /// Indica se è stata ricevuta almeno una posizione
+    /// dal server.
+    /// </summary>
+    public bool HasTargetPosition
+    {
+        get
+        {
+            return hasTargetPosition;
+        }
+    }
+
+
+    /// <summary>
+    /// Ultima posizione ricevuta dal server.
+    /// </summary>
+    public Vector3 TargetPosition
+    {
+        get
+        {
+            return targetPosition;
+        }
+    }
+
+
+    /// <summary>
+    /// Posizione corrente del GameObject Drone.
+    /// </summary>
+    public Vector3 CurrentPosition
+    {
+        get
+        {
+            if (droneObject == null)
+            {
+                return transform.position;
+            }
+
+            return droneObject.transform.position;
+        }
+    }
+
+
+    /// <summary>
+    /// Riferimento al GameObject Drone istanziato.
+    /// </summary>
+    public GameObject DroneObject
+    {
+        get
+        {
+            return droneObject;
+        }
+    }
 
 
     // =========================================================
@@ -170,6 +214,23 @@ public class DigitalTwinDrone : MonoBehaviour
 
 
         // -----------------------------------------------------
+        // Controllo prefab
+        // -----------------------------------------------------
+
+        if (dronePrefab == null)
+        {
+            Debug.LogError(
+                "DigitalTwinDrone: nessun Drone Prefab " +
+                "assegnato nell'Inspector.\n" +
+                "Trascinare Assets/Drone.prefab nel campo " +
+                "'Drone Prefab'."
+            );
+
+            return;
+        }
+
+
+        // -----------------------------------------------------
         // Controllo URL
         // -----------------------------------------------------
 
@@ -185,19 +246,58 @@ public class DigitalTwinDrone : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // Crea la Digital Twin
+        // Controllo velocità
+        // -----------------------------------------------------
+
+        if (movementSpeed < 0.0f)
+        {
+            movementSpeed = 0.0f;
+        }
+
+
+        // -----------------------------------------------------
+        // Controllo intervallo
+        // -----------------------------------------------------
+
+        if (requestInterval < 0.1f)
+        {
+            requestInterval = 0.1f;
+        }
+
+
+        // -----------------------------------------------------
+        // Controllo timeout
+        // -----------------------------------------------------
+
+        if (requestTimeout < 1)
+        {
+            requestTimeout = 1;
+        }
+
+
+        // -----------------------------------------------------
+        // Crea Drone
         // -----------------------------------------------------
 
         CreateDrone();
 
 
+        if (droneObject == null)
+        {
+            Debug.LogError(
+                "DigitalTwinDrone: impossibile istanziare " +
+                "il prefab Drone."
+            );
+
+            return;
+        }
+
+
         // -----------------------------------------------------
         // Posizione iniziale
-        //
-        // Parte dal centro della stanza.
         // -----------------------------------------------------
 
-        transform.position =
+        droneObject.transform.position =
             new Vector3(
                 0.0f,
                 roomGenerator.RoomHeight * 0.5f,
@@ -206,7 +306,14 @@ public class DigitalTwinDrone : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // Avvia polling HTTP
+        // Nessun target iniziale
+        // -----------------------------------------------------
+
+        hasTargetPosition = false;
+
+
+        // -----------------------------------------------------
+        // Avvia polling
         // -----------------------------------------------------
 
         positionCoroutine =
@@ -217,253 +324,34 @@ public class DigitalTwinDrone : MonoBehaviour
 
 
     // =========================================================
-    // CREA DIGITAL TWIN
+    // CREA DRONE
     // =========================================================
 
     private void CreateDrone()
     {
-        // -----------------------------------------------------
-        // Crea Primitive Capsule
-        // -----------------------------------------------------
-
         droneObject =
-            GameObject.CreatePrimitive(
-                PrimitiveType.Capsule
+            Instantiate(
+                dronePrefab
             );
 
 
         droneObject.name =
-            capsuleName;
+            dronePrefab.name;
 
-
-        // -----------------------------------------------------
-        // Parent
-        //
-        // La capsula viene inserita sotto il GameObject
-        // che contiene questo script.
-        // -----------------------------------------------------
 
         droneObject.transform.SetParent(
-            transform
+            transform,
+            true
         );
 
 
-        // -----------------------------------------------------
-        // Posizione locale iniziale
-        // -----------------------------------------------------
-
-        droneObject.transform.localPosition =
-            Vector3.zero;
-
-
-        droneObject.transform.localRotation =
-            Quaternion.identity;
-
-
-        // -----------------------------------------------------
-        // Dimensioni
-        //
-        // La Capsule Unity standard ha:
-        //
-        // altezza = 2
-        // diametro = 1
-        //
-        // Per ottenere:
-        //
-        // larghezza = 0.60 m
-        // altezza   = 0.10 m
-        //
-        // la scala viene calcolata in questo modo.
-        // -----------------------------------------------------
-
-        float scaleX =
-            capsuleWidth;
-
-        float scaleZ =
-            capsuleWidth;
-
-        float scaleY =
-            capsuleHeight * 0.5f;
-
-
-        droneObject.transform.localScale =
-            new Vector3(
-                scaleX,
-                scaleY,
-                scaleZ
-            );
-
-
-        // -----------------------------------------------------
-        // Renderer
-        // -----------------------------------------------------
-
-        droneRenderer =
-            droneObject.GetComponent<Renderer>();
-
-
-        // -----------------------------------------------------
-        // Crea materiale Built-in
-        // -----------------------------------------------------
-
-        CreateDroneMaterial();
-
-
-        droneRenderer.material =
-            droneMaterial;
-
-
-        // -----------------------------------------------------
-        // Collider
-        //
-        // Non serve per il movimento, quindi viene disabilitato.
-        // -----------------------------------------------------
-
-        CapsuleCollider capsuleCollider =
-            droneObject.GetComponent<CapsuleCollider>();
-
-
-        if (capsuleCollider != null)
-        {
-            capsuleCollider.enabled = false;
-        }
+        droneObject.transform.position =
+            transform.position;
     }
 
 
     // =========================================================
-    // CREA MATERIALE
-    // =========================================================
-
-    private void CreateDroneMaterial()
-    {
-        Shader standardShader =
-            Shader.Find(
-                "Standard"
-            );
-
-
-        if (standardShader == null)
-        {
-            Debug.LogError(
-                "DigitalTwinDrone: impossibile trovare " +
-                "lo shader Standard."
-            );
-
-            return;
-        }
-
-
-        droneMaterial =
-            new Material(
-                standardShader
-            );
-
-
-        droneMaterial.name =
-            "MAT_DigitalTwinDrone";
-
-
-        // -----------------------------------------------------
-        // Colore
-        // -----------------------------------------------------
-
-        droneMaterial.color =
-            capsuleColor;
-
-
-        // -----------------------------------------------------
-        // Materiale completamente opaco
-        // -----------------------------------------------------
-
-        droneMaterial.SetFloat(
-            "_Mode",
-            0.0f
-        );
-
-
-        droneMaterial.SetInt(
-            "_SrcBlend",
-            (int)UnityEngine.Rendering.BlendMode.One
-        );
-
-
-        droneMaterial.SetInt(
-            "_DstBlend",
-            (int)UnityEngine.Rendering.BlendMode.Zero
-        );
-
-
-        droneMaterial.SetInt(
-            "_ZWrite",
-            1
-        );
-
-
-        droneMaterial.DisableKeyword(
-            "_ALPHATEST_ON"
-        );
-
-
-        droneMaterial.DisableKeyword(
-            "_ALPHABLEND_ON"
-        );
-
-
-        droneMaterial.DisableKeyword(
-            "_ALPHAPREMULTIPLY_ON"
-        );
-
-
-        droneMaterial.renderQueue =
-            -1;
-
-
-        // -----------------------------------------------------
-        // Non metallico
-        // -----------------------------------------------------
-
-        droneMaterial.SetFloat(
-            "_Metallic",
-            0.0f
-        );
-
-
-        // -----------------------------------------------------
-        // Poco lucido
-        // -----------------------------------------------------
-
-        droneMaterial.SetFloat(
-            "_Glossiness",
-            0.20f
-        );
-
-
-        // -----------------------------------------------------
-        // Emissione
-        //
-        // Aiuta a rendere la capsula molto visibile anche
-        // nelle zone più scure della stanza.
-        // -----------------------------------------------------
-
-        droneMaterial.EnableKeyword(
-            "_EMISSION"
-        );
-
-
-        Color emissionColor =
-            capsuleColor *
-            1.5f;
-
-
-        droneMaterial.SetColor(
-            "_EmissionColor",
-            emissionColor
-        );
-    }
-
-
-    // =========================================================
-    // POLLING POSIZIONE
+    // POLLING
     // =========================================================
 
     private IEnumerator PositionPolling()
@@ -471,7 +359,7 @@ public class DigitalTwinDrone : MonoBehaviour
         while (true)
         {
             // -------------------------------------------------
-            // Richiede una nuova posizione
+            // Richiesta posizione
             // -------------------------------------------------
 
             yield return
@@ -481,7 +369,7 @@ public class DigitalTwinDrone : MonoBehaviour
 
 
             // -------------------------------------------------
-            // Aspetta prima della prossima richiesta
+            // Attesa
             // -------------------------------------------------
 
             yield return
@@ -493,7 +381,7 @@ public class DigitalTwinDrone : MonoBehaviour
 
 
     // =========================================================
-    // HTTP GET
+    // GET HTTP
     // =========================================================
 
     private IEnumerator GetNewPosition()
@@ -505,11 +393,12 @@ public class DigitalTwinDrone : MonoBehaviour
             // Timeout
             // -------------------------------------------------
 
-            request.timeout = 5;
+            request.timeout =
+                requestTimeout;
 
 
             // -------------------------------------------------
-            // Invia GET
+            // Invio
             // -------------------------------------------------
 
             yield return
@@ -517,7 +406,7 @@ public class DigitalTwinDrone : MonoBehaviour
 
 
             // -------------------------------------------------
-            // Controlla risultato
+            // Errore HTTP
             // -------------------------------------------------
 
             if (request.result !=
@@ -534,7 +423,7 @@ public class DigitalTwinDrone : MonoBehaviour
 
 
             // -------------------------------------------------
-            // Legge JSON
+            // Risposta
             // -------------------------------------------------
 
             string json =
@@ -580,7 +469,43 @@ public class DigitalTwinDrone : MonoBehaviour
 
 
             // -------------------------------------------------
-            // Controlla risultato
+            // Controllo null
+            // -------------------------------------------------
+
+            if (positionResponse == null)
+            {
+                Debug.LogWarning(
+                    "DigitalTwinDrone: risposta JSON " +
+                    "non valida.\n" +
+                    $"Risposta: {json}"
+                );
+
+                yield break;
+            }
+
+
+            // -------------------------------------------------
+            // Controllo numeri
+            // -------------------------------------------------
+
+            if (float.IsNaN(positionResponse.x) ||
+                float.IsNaN(positionResponse.y) ||
+                float.IsNaN(positionResponse.z) ||
+                float.IsInfinity(positionResponse.x) ||
+                float.IsInfinity(positionResponse.y) ||
+                float.IsInfinity(positionResponse.z))
+            {
+                Debug.LogWarning(
+                    "DigitalTwinDrone: coordinate non valide.\n" +
+                    $"Risposta: {json}"
+                );
+
+                yield break;
+            }
+
+
+            // -------------------------------------------------
+            // Nuovo target
             // -------------------------------------------------
 
             targetPosition =
@@ -591,13 +516,21 @@ public class DigitalTwinDrone : MonoBehaviour
                 );
 
 
-            hasTargetPosition = true;
+            hasTargetPosition =
+                true;
 
 
-            Debug.Log(
-                "DigitalTwinDrone: nuova posizione ricevuta: " +
-                targetPosition
-            );
+            // -------------------------------------------------
+            // Log
+            // -------------------------------------------------
+
+            if (logResponses)
+            {
+                Debug.Log(
+                    "DigitalTwinDrone: nuova posizione ricevuta: " +
+                    targetPosition
+                );
+            }
         }
     }
 
@@ -621,7 +554,7 @@ public class DigitalTwinDrone : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // Movimento graduale
+        // Movimento graduale verso il target
         // -----------------------------------------------------
 
         droneObject.transform.position =
@@ -631,6 +564,65 @@ public class DigitalTwinDrone : MonoBehaviour
                 movementSpeed *
                 Time.deltaTime
             );
+    }
+
+
+    // =========================================================
+    // VERIFICA TARGET RAGGIUNTO
+    // =========================================================
+
+    /// <summary>
+    /// Restituisce true quando il Drone si trova entro
+    /// la tolleranza specificata dal target.
+    /// </summary>
+    public bool HasReachedTarget(
+        float tolerance)
+    {
+        if (!hasTargetPosition)
+        {
+            return false;
+        }
+
+
+        if (droneObject == null)
+        {
+            return false;
+        }
+
+
+        if (tolerance < 0.0f)
+        {
+            tolerance = 0.0f;
+        }
+
+
+        float distance =
+            Vector3.Distance(
+                droneObject.transform.position,
+                targetPosition
+            );
+
+
+        return distance <= tolerance;
+    }
+
+
+    // =========================================================
+    // POSIZIONE CORRENTE
+    // =========================================================
+
+    /// <summary>
+    /// Restituisce la posizione corrente del Drone.
+    /// </summary>
+    public Vector3 GetCurrentPosition()
+    {
+        if (droneObject == null)
+        {
+            return transform.position;
+        }
+
+
+        return droneObject.transform.position;
     }
 
 
@@ -655,6 +647,10 @@ public class DigitalTwinDrone : MonoBehaviour
 
     private void OnDestroy()
     {
+        // -----------------------------------------------------
+        // Ferma coroutine
+        // -----------------------------------------------------
+
         if (positionCoroutine != null)
         {
             StopCoroutine(
@@ -665,14 +661,17 @@ public class DigitalTwinDrone : MonoBehaviour
         }
 
 
-        if (droneMaterial != null)
+        // -----------------------------------------------------
+        // Distrugge Drone
+        // -----------------------------------------------------
+
+        if (droneObject != null)
         {
             Destroy(
-                droneMaterial
+                droneObject
             );
 
-            droneMaterial = null;
+            droneObject = null;
         }
     }
 }
-
