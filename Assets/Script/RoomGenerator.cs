@@ -87,7 +87,7 @@ public class RoomGenerator : MonoBehaviour
     private bool createLights = true;
 
     [SerializeField]
-    private float ambientIntensity = 0.65f;
+    private float ambientIntensity = 0.25f;
 
 
     // =========================================================
@@ -184,9 +184,9 @@ public class RoomGenerator : MonoBehaviour
 
         wallMaterial.color =
             new Color(
-                0.55f,
-                0.57f,
-                0.60f,
+                0.20f,
+                0.20f,
+                0.20f,
                 1.0f
             );
 
@@ -197,7 +197,7 @@ public class RoomGenerator : MonoBehaviour
 
         wallMaterial.SetFloat(
             "_Glossiness",
-            0.30f
+            0.20f
         );
 
 
@@ -246,9 +246,9 @@ public class RoomGenerator : MonoBehaviour
 
         ceilingMaterial.color =
             new Color(
-                0.70f,
-                0.70f,
-                0.68f,
+                0.10f,
+                0.10f,
+                0.10f,
                 1.0f
             );
 
@@ -277,9 +277,9 @@ public class RoomGenerator : MonoBehaviour
 
         absorberMaterial.color =
             new Color(
-                0.035f,
-                0.045f,
                 0.055f,
+                0.070f,
+                0.085f,
                 1.0f
             );
 
@@ -902,9 +902,9 @@ public class RoomGenerator : MonoBehaviour
 
         RenderSettings.ambientLight =
             new Color(
-                0.24f,
-                0.26f,
-                0.31f
+                0.10f,
+                0.12f,
+                0.16f
             );
 
         RenderSettings.ambientIntensity =
@@ -924,8 +924,8 @@ public class RoomGenerator : MonoBehaviour
                 0.0f
             ),
 
-            900.0f,
             12.0f,
+            10.0f,
 
             new Color(
                 1.0f,
@@ -950,8 +950,8 @@ public class RoomGenerator : MonoBehaviour
                 4.0f
             ),
 
-            650.0f,
-            9.0f,
+            10.0f,
+            7.0f,
 
             new Color(
                 1.0f,
@@ -976,8 +976,8 @@ public class RoomGenerator : MonoBehaviour
                 4.0f
             ),
 
-            650.0f,
-            9.0f,
+            10.0f,
+            7.0f,
 
             new Color(
                 1.0f,
@@ -1002,8 +1002,8 @@ public class RoomGenerator : MonoBehaviour
                 -4.0f
             ),
 
-            650.0f,
-            9.0f,
+            10.0f,
+            7.0f,
 
             new Color(
                 1.0f,
@@ -1028,8 +1028,8 @@ public class RoomGenerator : MonoBehaviour
                 -4.0f
             ),
 
-            650.0f,
-            9.0f,
+            10.0f,
+            7.0f,
 
             new Color(
                 1.0f,
