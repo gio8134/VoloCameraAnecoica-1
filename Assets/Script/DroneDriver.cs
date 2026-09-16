@@ -13,7 +13,17 @@ public class DroneDriver : MonoBehaviour
     // DRONE
     // =========================================================================
 
+    [Header("Radar")]
+    [SerializeField]
+    private RadarSemiCircle radar;
+
+    [Header("PuntoTarget")]
+    [SerializeField]
+    private Vector3 referencePoint = new Vector3(7.7f, 0f, 0f);
+
     [Header("Drone")]
+
+    
 
     [Tooltip(
         "Root del prefab/GameObject del drone. " +
@@ -151,11 +161,22 @@ public class DroneDriver : MonoBehaviour
         StartHttpServer();
     }
 
+    public void SetRadar()
+    {
+        float distanza = Vector3.Distance(drone.transform.position, referencePoint);
+        Debug.Log($" distanza dal referencePoint = {distanza}");
+        float scaglione = distanza / 5.0f;
+        int settoreCurrent = Mathf.RoundToInt(scaglione);
+        radar.SetSettore(settoreCurrent+1);
+    }
+
+
 
     private void Update()
     {
         ProcessIncomingTargets();
         MoveDrone();
+        SetRadar();
     }
 
 
